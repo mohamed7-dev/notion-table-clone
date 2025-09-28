@@ -1,8 +1,5 @@
 "use client";
-
 import type React from "react";
-
-import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -39,26 +36,8 @@ import {
   DropdownMenuTrigger,
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
-
-type ColumnType = "text" | "number" | "select" | "checkbox" | "date";
-
-interface Column {
-  id: string;
-  name: string;
-  type: ColumnType;
-  options?: string[];
-  width?: number;
-}
-
-interface Cell {
-  id: string;
-  value: any;
-}
-
-interface Row {
-  id: string;
-  cells: { [columnId: string]: Cell };
-}
+import { Column, Row, useReactTable } from "@/hooks/use-react-table";
+import { useResizeColumn } from "@/hooks/use-resize-column";
 
 interface NotionTableProps {
   initialColumns?: Column[];
@@ -77,226 +56,31 @@ export function NotionTable({
   initialColumns = [],
   initialRows = [],
 }: NotionTableProps) {
-  const [columns, setColumns] = useState<Column[]>(
-    initialColumns.length > 0
-      ? initialColumns
-      : [
-          { id: "1", name: "Name", type: "text", width: 200 },
-          {
-            id: "2",
-            name: "Status",
-            type: "select",
-            options: ["Not Started", "In Progress", "Complete"],
-            width: 150,
-          },
-          {
-            id: "3",
-            name: "Priority",
-            type: "select",
-            options: ["Low", "Medium", "High"],
-            width: 120,
-          },
-          { id: "4", name: "Done", type: "checkbox", width: 80 },
-          { id: "5", name: "Due Date", type: "date", width: 150 },
-        ]
-  );
+  const {
+    columns,
+    setColumns,
+    editingColumn,
+    setEditingColumn,
+    updateColumnName,
+    addColumn,
+    deleteColumn,
+    rows,
+    setEditingCell,
+    addRow,
+    deleteRow,
+    inputRef,
+    isCellEditing,
+    updateCellValue,
+  } = useReactTable({ rows: initialRows, columns: initialColumns });
 
-  const [rows, setRows] = useState<Row[]>(
-    initialRows.length > 0
-      ? initialRows
-      : [
-          {
-            id: "1",
-            cells: {
-              "1": { id: "1-1", value: "Task 1" },
-              "2": { id: "1-2", value: "In Progress" },
-              "3": { id: "1-3", value: "High" },
-              "4": { id: "1-4", value: false },
-              "5": { id: "1-5", value: "" },
-            },
-          },
-          {
-            id: "2",
-            cells: {
-              "1": { id: "2-1", value: "Task 2" },
-              "2": { id: "2-2", value: "Complete" },
-              "3": { id: "2-3", value: "Medium" },
-              "4": { id: "2-4", value: true },
-              "5": { id: "2-5", value: "" },
-            },
-          },
-        ]
-  );
-
-  const [editingCell, setEditingCell] = useState<{
-    rowId: string;
-    columnId: string;
-  } | null>(null);
-  const [editingColumn, setEditingColumn] = useState<string | null>(null);
-  const [resizingColumn, setResizingColumn] = useState<{
-    columnId: string;
-    startX: number;
-    startWidth: number;
-  } | null>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    if (editingCell && inputRef.current) {
-      inputRef.current.focus();
-    }
-  }, [editingCell]);
-
-  useEffect(() => {
-    if (resizingColumn) {
-      document.addEventListener("mousemove", handleMouseMove);
-      document.addEventListener("mouseup", handleMouseUp);
-      return () => {
-        document.removeEventListener("mousemove", handleMouseMove);
-        document.removeEventListener("mouseup", handleMouseUp);
-      };
-    }
-  }, [resizingColumn]);
-
-  const addColumn = (type: ColumnType, insertIndex?: number) => {
-    const newColumn: Column = {
-      id: Date.now().toString(),
-      name: "New Column",
-      type,
-      width: 150,
-      options: type === "select" ? ["Option 1", "Option 2"] : undefined,
-    };
-
-    const newColumns = [...columns];
-    if (insertIndex !== undefined) {
-      newColumns.splice(insertIndex, 0, newColumn);
-    } else {
-      newColumns.push(newColumn);
-    }
-    setColumns(newColumns);
-
-    setRows(
-      rows.map((row) => ({
-        ...row,
-        cells: {
-          ...row.cells,
-          [newColumn.id]: {
-            id: `${row.id}-${newColumn.id}`,
-            value: getDefaultValue(type),
-          },
-        },
-      }))
-    );
-  };
-
-  const addRow = (insertIndex?: number) => {
-    const newRow: Row = {
-      id: Date.now().toString(),
-      cells: {},
-    };
-
-    columns.forEach((column) => {
-      newRow.cells[column.id] = {
-        id: `${newRow.id}-${column.id}`,
-        value: getDefaultValue(column.type),
-      };
-    });
-
-    const newRows = [...rows];
-    if (insertIndex !== undefined) {
-      newRows.splice(insertIndex, 0, newRow);
-    } else {
-      newRows.push(newRow);
-    }
-    setRows(newRows);
-  };
-
-  const deleteRow = (rowId: string) => {
-    setRows(rows.filter((row) => row.id !== rowId));
-  };
-
-  const deleteColumn = (columnId: string) => {
-    setColumns(columns.filter((col) => col.id !== columnId));
-    setRows(
-      rows.map((row) => {
-        const newCells = { ...row.cells };
-        delete newCells[columnId];
-        return { ...row, cells: newCells };
-      })
-    );
-  };
-
-  const getDefaultValue = (type: ColumnType) => {
-    switch (type) {
-      case "text":
-        return "";
-      case "number":
-        return 0;
-      case "checkbox":
-        return false;
-      case "select":
-        return "";
-      case "date":
-        return "";
-      default:
-        return "";
-    }
-  };
-
-  const updateCellValue = (rowId: string, columnId: string, value: any) => {
-    setRows(
-      rows.map((row) =>
-        row.id === rowId
-          ? {
-              ...row,
-              cells: {
-                ...row.cells,
-                [columnId]: { ...row.cells[columnId], value },
-              },
-            }
-          : row
-      )
-    );
-  };
-
-  const updateColumnName = (columnId: string, name: string) => {
-    setColumns(
-      columns.map((col) => (col.id === columnId ? { ...col, name } : col))
-    );
-  };
-
-  const handleMouseDown = (e: React.MouseEvent, columnId: string) => {
-    e.preventDefault();
-    const column = columns.find((col) => col.id === columnId);
-    if (column) {
-      setResizingColumn({
-        columnId,
-        startX: e.clientX,
-        startWidth: column.width || 150,
-      });
-    }
-  };
-
-  const handleMouseMove = (e: MouseEvent) => {
-    if (resizingColumn) {
-      const diff = e.clientX - resizingColumn.startX;
-      const newWidth = Math.max(80, resizingColumn.startWidth + diff);
-
-      setColumns(
-        columns.map((col) =>
-          col.id === resizingColumn.columnId ? { ...col, width: newWidth } : col
-        )
-      );
-    }
-  };
-
-  const handleMouseUp = () => {
-    setResizingColumn(null);
-  };
+  const { handleMouseDown } = useResizeColumn({
+    columns,
+    updateColumns: (updatedColumns) => setColumns(updatedColumns),
+  });
 
   const renderCell = (row: Row, column: Column) => {
     const cell = row.cells[column.id];
-    const isEditing =
-      editingCell?.rowId === row.id && editingCell?.columnId === column.id;
+    const isEditing = isCellEditing(row, column);
 
     if (isEditing) {
       switch (column.type) {
@@ -345,7 +129,7 @@ export function NotionTable({
               }}
             >
               <SelectTrigger className="border-0 bg-transparent p-0 h-auto focus:ring-2 focus:ring-accent">
-                <SelectValue />
+                <SelectValue placeholder="Select an option" />
               </SelectTrigger>
               <SelectContent>
                 {column.options?.map((option) => (
@@ -387,7 +171,6 @@ export function NotionTable({
                     );
                     setEditingCell(null);
                   }}
-                  initialFocus
                 />
               </PopoverContent>
             </Popover>
@@ -405,7 +188,6 @@ export function NotionTable({
             onCheckedChange={(checked) =>
               updateCellValue(row.id, column.id, checked)
             }
-            className="data-[state=checked]:bg-accent data-[state=checked]:border-accent"
           />
         );
       case "select":
@@ -427,7 +209,7 @@ export function NotionTable({
                 : "bg-gray-100 text-gray-800"
             }`}
           >
-            {cell?.value || ""}
+            {cell?.value || "No Option Selected"}
           </span>
         );
       case "date":
@@ -487,7 +269,7 @@ export function NotionTable({
                           />
                         ) : (
                           <span
-                            className="cursor-pointer hover:text-accent transition-colors"
+                            className="cursor-pointer hover:text-secondary-foreground transition-colors"
                             onClick={() => setEditingColumn(column.id)}
                           >
                             {column.name}
@@ -527,8 +309,9 @@ export function NotionTable({
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </div>
+
                       <div
-                        className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-accent transition-colors opacity-0 group-hover:opacity-100"
+                        className="absolute inset-0 w-1 cursor-col-resize hover:bg-gray-400 transition-opacity opacity-0 group-hover:opacity-100"
                         onMouseDown={(e) => handleMouseDown(e, column.id)}
                       />
                     </th>
@@ -572,7 +355,7 @@ export function NotionTable({
                 <tr
                   key={row.id}
                   className={`border-b border-border hover:bg-card/50 transition-colors group ${
-                    rowIndex % 2 === 0 ? "bg-background" : "bg-muted/30"
+                    rowIndex % 2 === 0 ? "bg-background" : "bg-muted/50"
                   }`}
                 >
                   {columns.map((column) => (
